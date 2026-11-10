@@ -126,21 +126,23 @@
     }
     
     
-    // 3. Mengirim data ke Google Sheets & Menjalankan Form Website Pihak ke-3
-    async function prosesDanKirim() {
+async function prosesDanKirim() {
       const dataKtp = {
         nik: document.getElementById('resNik').value,
         nama: document.getElementById('resNama').value,
         tempatLahir: document.getElementById('resTempatLahir').value,
-        noHp: "081954708657" // Contoh No HP
+        noHp: "081954708657" // Sesuaikan No HP Anda
       };
 
       if(!dataKtp.nik) {
-        alert("Data belum lengkap!");
+        alert("Data NIK masih kosong!");
         return;
       }
 
-      // A. Kirim ke Google Sheets
+      // 1. Simpan data ke memori browser (localStorage) agar bisa dibaca di tab aslinmas.id
+      localStorage.setItem('ktp_cache_data', JSON.stringify(dataKtp));
+
+      // 2. Kirim ke Google Sheets seperti biasa
       try {
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
@@ -148,15 +150,12 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(dataKtp)
         });
-        alert("Berhasil disimpan ke Google Spreadsheet!");
+        alert("Berhasil disimpan ke Google Sheets & memori HP! Silakan buka tab aslinmas.id Anda.");
       } catch (error) {
         console.error(error);
       }
-
-      // B. Jalankan Skrip Pengisian Form Website Pihak ke-3 (Sesuai Inspect Element Anda)
-      autofillWebsitePihakKetiga(dataKtp);
     }
-
+    
     // 4. Skrip Pengisian Otomatis (JavaScript Injection)
     function autofillWebsitePihakKetiga(data) {
       // Mengisi NIK
