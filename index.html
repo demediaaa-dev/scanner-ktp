@@ -125,8 +125,7 @@
       if(tempatLahir) document.getElementById('resTempatLahir').value = tempatLahir;
     }
     
-    
-async function prosesDanKirim() {
+    async function prosesDanKirim() {
       const dataKtp = {
         nik: document.getElementById('resNik').value,
         nama: document.getElementById('resNama').value,
@@ -139,7 +138,13 @@ async function prosesDanKirim() {
         return;
       }
 
-      // A. Kirim ke Google Sheets seperti biasa
+      // 1. Simpan ke LocalStorage dengan trik membuka halaman perantara atau langsung salin ke clipboard
+      // Agar 100% work tanpa ribet, kita salin data ke Clipboard dan buka aslinmas.id
+      const teksFormat = `NIK: ${dataKtp.nik}\nNama: ${dataKtp.nama}\nTempat Lahir: ${dataKtp.tempatLahir}`;
+      
+      await navigator.clipboard.writeText(teksFormat);
+
+      // 2. Kirim ke Google Sheets
       try {
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
@@ -151,18 +156,12 @@ async function prosesDanKirim() {
         console.error(error);
       }
 
-      // B. Bungkus data ke dalam URL dan langsung arahkan ke aslinmas.id
-      const queryParams = new URLSearchParams({
-        nik: dataKtp.nik,
-        nama: dataKtp.nama,
-        tempat: dataKtp.tempatLahir
-      }).toString();
-
-      alert("Data masuk Sheets! Anda akan dialihkan ke aslinmas.id.");
+      alert("Data masuk Sheets & otomatis tersalin ke Clipboard HP! Silakan tap 1 kali lalu Paste (Tempel) di form aslinmas.id.");
       
-      // Buka halaman aslinmas.id membawa data otomatis di link
-      window.location.href = `https://aslinmas.id/anggota/portal/edit?${queryParams}`;
-    }    
+      // Buka halaman aslinmas.id
+      window.location.href = "https://aslinmas.id/anggota/portal/edit";
+    }
+    
     // 4. Skrip Pengisian Otomatis (JavaScript Injection)
     function autofillWebsitePihakKetiga(data) {
       // Mengisi NIK
