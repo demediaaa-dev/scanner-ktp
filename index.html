@@ -69,31 +69,57 @@
     });
 
     // 2. Ekstraksi teks NIK, Nama, dan Tempat Lahir
+// 2. Ekstraksi teks NIK, Nama, dan Tempat Lahir (Versi Lebih Pintar)
     function parsingTeksKtp(text) {
       const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       let nik = "", nama = "", tempatLahir = "";
 
       lines.forEach(line => {
-        if (/^\d{16}$/.test(line.replace(/\D/g,''))) {
-          nik = line.replace(/\D/g,'').substring(0, 16);
+        // Bersihkan karakter selain angka untuk mencari baris yang mirip NIK (panjang angka mendekati 16 digit)
+        let cleanLine = line.replace(/\D/g, '');
+        
+        // Cek jika angka yang ditemukan panjangnya antara 15 sampai 16 digit (mengantisipasi salah baca 1 huruf)
+        if (cleanLine.length >= 14 && cleanLine.length <= 16 && !nik) {
+          nik = cleanLine.padEnd(16, '0').substring(0, 16); // Normalisasi jadi 16 digit
         }
-        if (line.toUpperCase().includes("NAMA")) {
-          let parts = line.split(":");
-          if (parts.length > 1) nama = parts[1].trim();
-        }
-        if (line.toUpperCase().includes("LAHIR")) {
+
+        // Cari indikasi kata NIK atau KTP jika belum ketemu dari angka murni
+        if (line.toUpperCase().includes("NIK") && !nik) {
           let parts = line.split(":");
           if (parts.length > 1) {
-            tempatLahir = parts[1].split(",")[0].trim();
+            let extracted = parts[1].replace(/\D/g, '');
+            if (extracted.length >= 10) nik = extracted.substring(0, 16);
+          }
+        }
+
+        // Cari indikasi Nama
+        if (line.toUpperCase().includes("NAMA") && !nama) {
+          let parts = line.split(":");
+          if (parts.length > 1 && parts[1].trim().length > 2) {
+            nama = parts[1].trim();
+          }
+        }
+
+        // Cari indikasi Tempat Lahir
+        if ((line.toUpperCase().includes("LAHIR") || line.toUpperCase().includes("TEMPAT")) && !tempatLahir) {
+          let parts = line.split(":");
+          if (parts.length > 1) {
+            tempatLahir = parts[1].split(",")[0].replace(/[^a-zA-Z\s]/g, '').trim();
           }
         }
       });
 
+      // Masukkan ke kolom tampilan web (jika terbaca)
       if(nik) document.getElementById('resNik').value = nik;
       if(nama) document.getElementById('resNama').value = nama;
       if(tempatLahir) document.getElementById('resTempatLahir').value = tempatLahir;
+      
+      // Jika NIK masih kosong, berikan notifikasi agar pengguna bisa ketik manual jika darurat
+      if(!nik) {
+        console.log("Teks mentah OCR:", text); // Untuk debugging di Console HP
+        alert("NIK tidak terbaca otomatis oleh kamera. Silakan ketik NIK secara manual di kolom yang tersedia.");
+      }
     }
-
     // 3. Mengirim data ke Google Sheets & Menjalankan Form Website Pihak ke-3
     async function prosesDanKirim() {
       const dataKtp = {
