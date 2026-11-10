@@ -131,7 +131,7 @@ async function prosesDanKirim() {
         nik: document.getElementById('resNik').value,
         nama: document.getElementById('resNama').value,
         tempatLahir: document.getElementById('resTempatLahir').value,
-        noHp: "081954708657" // Sesuaikan No HP Anda
+        noHp: "081954708657"
       };
 
       if(!dataKtp.nik) {
@@ -139,10 +139,7 @@ async function prosesDanKirim() {
         return;
       }
 
-      // 1. Simpan data ke memori browser (localStorage) agar bisa dibaca di tab aslinmas.id
-      localStorage.setItem('ktp_cache_data', JSON.stringify(dataKtp));
-
-      // 2. Kirim ke Google Sheets seperti biasa
+      // A. Kirim ke Google Sheets seperti biasa
       try {
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
@@ -150,12 +147,22 @@ async function prosesDanKirim() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(dataKtp)
         });
-        alert("Berhasil disimpan ke Google Sheets & memori HP! Silakan buka tab aslinmas.id Anda.");
       } catch (error) {
         console.error(error);
       }
-    }
-    
+
+      // B. Bungkus data ke dalam URL dan langsung arahkan ke aslinmas.id
+      const queryParams = new URLSearchParams({
+        nik: dataKtp.nik,
+        nama: dataKtp.nama,
+        tempat: dataKtp.tempatLahir
+      }).toString();
+
+      alert("Data masuk Sheets! Anda akan dialihkan ke aslinmas.id.");
+      
+      // Buka halaman aslinmas.id membawa data otomatis di link
+      window.location.href = `https://aslinmas.id/anggota/portal/edit?${queryParams}`;
+    }    
     // 4. Skrip Pengisian Otomatis (JavaScript Injection)
     function autofillWebsitePihakKetiga(data) {
       // Mengisi NIK
