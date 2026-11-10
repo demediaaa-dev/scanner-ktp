@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanner KTP Otomatis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Pustaka OCR pembaca teks KTP -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@v5/dist/tesseract.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 flex flex-col items-center justify-center">
+
+  <div class="max-w-md w-full bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+    <div class="flex items-center gap-3 mb-5">
+      <span class="w-7 h-7 rounded-full bg-[#0C210E] text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
+      <h1 class="font-black text-slate-800">Scan KTP & Isi Form</h1>
+    </div>
+
+    <!-- Tombol Ambil Foto KTP -->
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-slate-700 mb-1.5">Foto KTP</label>
+      <input type="file" accept="image/*" capture="environment" id="ktpInput" class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm bg-white file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#0C210E] file:text-white">
+    </div>
+
+    <div id="statusText" class="text-xs text-amber-600 font-semibold mb-4 hidden">Sedang membaca KTP...</div>
+
+    <!-- Kotak Hasil Preview -->
+    <div class="space-y-3 text-sm">
+      <div>
+        <label class="block font-semibold text-slate-700 mb-1">NIK</label>
+        <input type="text" id="resNik" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="NIK">
+      </div>
+      <div>
+        <label class="block font-semibold text-slate-700 mb-1">Nama Lengkap</label>
+        <input type="text" id="resNama" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="Nama">
+      </div>
+      <div>
+        <label class="block font-semibold text-slate-700 mb-1">Tempat Lahir</label>
+        <input type="text" id="resTempatLahir" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="Tempat Lahir">
+      </div>
+    </div>
+
+    <!-- Tombol Kirim -->
+    <button onclick="prosesDanKirim()" class="w-full mt-6 bg-[#0C210E] hover:bg-[#1A3010] text-white py-3 rounded-xl text-sm font-bold transition-colors">
+      Simpan ke Sheets & Isi Form
+    </button>
+  </div>
+
+  <script>
+    // ⚠️ MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI:
+    const GOOGLE_SCRIPT_URL = "URL_WEB_APP_ANDA_DISINI";
+
+    // 1. Membaca gambar KTP menggunakan OCR
+    document.getElementById('ktpInput').addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const statusEl = document.getElementById('statusText');
+      statusEl.classList.remove('hidden');
+      statusEl.innerText = "Memproses teks KTP...";
+
+      try {
+        const { data: { text } } = await Tesseract.recognize(file, 'ind');
+        statusEl.innerText = "Selesai dibaca!";
+        parsingTeksKtp(text);
+      } catch (err) {
+        statusEl.innerText = "Gagal membaca KTP.";
+      }
+    });
+
+    // 2. Ekstraksi teks NIK, Nama, dan Tempat Lahir
+    function parsingTeksKtp(text) {
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      let nik = "", nama = "", tempatLahir = "";
+
+      lines.forEach(line => {
+        if (/^\d{16}$/.test(line.replace(/\D/g,''))) {
+          nik = line.replace(/\D/g,'').substring(0, 16);
+        }
+        if (line.toUpperCase().includes("NAMA")) {
+          let parts = line.split(":");
+          if (parts.length > 1) nama = parts[1].trim();
+        }
+        if (line.toUpperCase().includes("LAHIR")) {
+          let parts = line.split(":");
+          if (parts.length > 1) {
+            tempatLahir = parts[1].split(",")[0].trim();
+          }
+        }
+      });
+
+      if(nik) document.getElementById('resNik').value = nik;
+      if(nama) document.getElementById('resNama').value = nama;
+      if(tempatLahir) document.getElementById('resTempatLahir').value = tempatLahir;
+    }
+
+    // 3. Mengirim data ke Google Sheets & Menjalankan Form Website Pihak ke-3
+    async function prosesDanKirim() {
+      const dataKtp = {
+        nik: document.getElementById('resNik').value,
+        nama: document.getElementById('resNama').value,
+        tempatLahir: document.getElementById('resTempatLahir').value,
+        noHp: "081954708657" // Contoh No HP
+      };
+
+      if(!dataKtp.nik) {
+        alert("Data belum lengkap!");
+        return;
+      }
+
+      // A. Kirim ke Google Sheets
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(dataKtp)
+        });
+        alert("Berhasil disimpan ke Google Spreadsheet!");
+      } catch (error) {
+        console.error(error);
+      }
+
+      // B. Jalankan Skrip Pengisian Form Website Pihak ke-3 (Sesuai Inspect Element Anda)
+      autofillWebsitePihakKetiga(dataKtp);
+    }
+
+    // 4. Skrip Pengisian Otomatis (JavaScript Injection)
+    function autofillWebsitePihakKetiga(data) {
+      // Mengisi NIK
+      const nikInput = document.querySelector('input[placeholder="NIK"]');
+      if (nikInput) {
+        nikInput.value = data.nik;
+        nikInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // Mengisi Nama Lengkap
+      const namaInput = document.querySelector('input[placeholder="Nama lengkap"]');
+      if (namaInput) {
+        namaInput.value = data.nama;
+        namaInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // Mengisi Tempat Lahir (id="birth_place")
+      const tempatLahirInput = document.getElementById('birth_place');
+      if (tempatLahirInput) {
+        tempatLahirInput.value = data.tempatLahir;
+        tempatLahirInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  </script>
+</body>
+</html>
