@@ -1,190 +1,1584 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scanner KTP Otomatis</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistem Pemindai KTP & Pencatat Data Warga</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Pustaka OCR pembaca teks KTP -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@v5/dist/tesseract.min.js"></script>
+  <!-- Tesseract.js v5 CDN untuk Real-time OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    @keyframes scanLine {
+      0% { top: 8%; opacity: 0.2; }
+      50% { top: 90%; opacity: 0.9; }
+      100% { top: 8%; opacity: 0.2; }
+    }
+    .animate-scan {
+      animation: scanLine 2.8s ease-in-out infinite;
+    }
+    /* Custom scrollbar minimalis */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f8fafc;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
 </head>
-<body class="bg-slate-100 min-h-screen p-4 flex flex-col items-center justify-center">
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
 
-  <div class="max-w-md w-full bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-    <div class="flex items-center gap-3 mb-5">
-      <span class="w-7 h-7 rounded-full bg-[#0C210E] text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
-      <h1 class="font-black text-slate-800">Scan KTP & Isi Form</h1>
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Header Minimalis -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-xs">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 9h6m-6 4h4m-4 4h5m4-8h.01M17 13v4" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold text-slate-900 tracking-tight leading-none">Pemindai KTP Digital</h1>
+          <p class="text-xs text-slate-500 mt-1">Ekstraksi Data Warga Real-Time ke Spreadsheet</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Indikator Status Engine OCR -->
+        <div id="engine-badge" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-600">
+          <span id="engine-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          <span id="engine-text">Memuat OCR Engine...</span>
+        </div>
+
+        <!-- Tombol Pengaturan Google Sheets -->
+        <button id="btn-open-settings" type="button" class="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer">
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>Integrasi Sheets</span>
+          <span id="webhook-active-dot" class="hidden w-2 h-2 rounded-full bg-emerald-500"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- Grid Utama: Kamera Scanner (Kiri) & Form Verifikasi (Kanan) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- Kolom Kiri: Live Camera & Alignment Overlay -->
+      <section class="lg:col-span-6 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <h2 class="text-sm font-semibold text-slate-800">Pemindai Kamera Langsung</h2>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="btn-switch-camera" type="button" title="Ganti Kamera" class="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-lg border border-slate-200 bg-white transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <button id="btn-toggle-camera" type="button" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+              <span id="cam-btn-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span id="cam-btn-text">Kamera Aktif</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Viewport Kamera dengan Overlay KTP Presisi -->
+        <div class="relative w-full aspect-[4/3] sm:aspect-[16/11] bg-slate-950 overflow-hidden select-none flex items-center justify-center">
+          <video id="camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+
+          <!-- Fallback jika kamera tidak tersedia / dimatikan -->
+          <div id="camera-placeholder" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900 text-slate-300 z-10">
+            <svg class="w-10 h-10 text-slate-500 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+            <p id="camera-error-msg" class="text-sm font-medium text-slate-200">Kamera tidak aktif atau akses ditolak</p>
+            <p class="text-xs text-slate-400 mt-1 max-w-xs">Pastikan izin kamera diberikan pada browser atau unggah foto KTP sebagai alternatif.</p>
+            <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <button id="btn-retry-camera" type="button" class="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">
+                Aktifkan Kamera
+              </button>
+              <label class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors cursor-pointer">
+                Unggah Gambar KTP
+                <input id="file-upload-ktp" type="file" accept="image/*" class="hidden" />
+              </label>
+            </div>
+          </div>
+
+          <!-- Overlay Bingkai KTP Presisi (Rasio ISO/IEC 7810 ID-1 ~ 1.586:1) -->
+          <div id="ktp-overlay" class="absolute inset-0 pointer-events-none flex items-center justify-center p-4 sm:p-6">
+            <!-- Bingkai Kartu KTP -->
+            <div id="ktp-guide-frame" class="relative w-full max-w-[440px] aspect-[1.586/1] rounded-xl border border-white/60 shadow-[0_0_0_9999px_rgba(2,6,23,0.58)] transition-colors duration-300">
+              
+              <!-- Sudut Penanda Presisi -->
+              <div class="absolute -top-0.5 -left-0.5 w-6 h-6 border-t-2 border-l-2 border-blue-400 rounded-tl-xl"></div>
+              <div class="absolute -top-0.5 -right-0.5 w-6 h-6 border-t-2 border-r-2 border-blue-400 rounded-tr-xl"></div>
+              <div class="absolute -bottom-0.5 -left-0.5 w-6 h-6 border-b-2 border-l-2 border-blue-400 rounded-bl-xl"></div>
+              <div class="absolute -bottom-0.5 -right-0.5 w-6 h-6 border-b-2 border-r-2 border-blue-400 rounded-br-xl"></div>
+
+              <!-- Garis Pemindaian Animasi -->
+              <div id="scan-laser" class="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-scan"></div>
+
+              <!-- Header KTP Guide (Provinsi / Kab) -->
+              <div class="absolute top-[5%] left-[12%] right-[12%] h-[11%] border border-dashed border-white/35 rounded flex items-center justify-center">
+                <span class="text-[9px] sm:text-[10px] tracking-widest uppercase font-medium text-white/70">Provinsi / Kabupaten / Kota</span>
+              </div>
+
+              <!-- Kotak Posisi NIK (Kiri Atas di bawah Header) -->
+              <div class="absolute top-[19%] left-[5%] w-[62%] h-[12%] border border-dashed border-emerald-400/80 bg-emerald-400/10 rounded flex items-center px-2">
+                <span class="text-[9px] sm:text-[10px] font-semibold tracking-wider text-emerald-300 uppercase">Lokasi NIK (16 Digit)</span>
+              </div>
+
+              <!-- Kotak Area Data Identitas (Kiri Tengah - Bawah) -->
+              <div class="absolute top-[34%] left-[5%] w-[62%] bottom-[8%] border border-dashed border-white/30 rounded p-1.5 flex flex-col justify-between">
+                <span class="text-[8px] sm:text-[9px] text-white/60 uppercase tracking-wider">Area Data Penduduk (Nama, TTL, Alamat)</span>
+                <div class="space-y-1 opacity-30">
+                  <div class="h-1 w-4/5 bg-white rounded"></div>
+                  <div class="h-1 w-3/5 bg-white rounded"></div>
+                  <div class="h-1 w-11/12 bg-white rounded"></div>
+                </div>
+              </div>
+
+              <!-- Kotak Posisi Pas Foto (Kanan) -->
+              <div class="absolute top-[22%] right-[5%] w-[25%] h-[50%] border border-dashed border-blue-400/80 bg-blue-400/10 rounded-md flex flex-col items-center justify-center p-1 text-center">
+                <svg class="w-5 h-5 text-blue-300/80 mb-1" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+                <span class="text-[8px] sm:text-[9px] font-semibold uppercase tracking-wider text-blue-200 leading-tight">Kotak Pas Foto</span>
+              </div>
+
+              <!-- Kotak Tanda Tangan (Kanan Bawah) -->
+              <div class="absolute bottom-[8%] right-[5%] w-[25%] h-[16%] border border-dashed border-white/30 rounded flex items-center justify-center">
+                <span class="text-[8px] text-white/50 uppercase">TTD</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Bar Overlay Bawah -->
+          <div class="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between gap-2">
+            <div id="scan-status-pill" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/85 backdrop-blur-xs border border-white/15 text-xs font-medium text-white shadow-sm">
+              <span id="scan-status-dot" class="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
+              <span id="scan-status-text">Mencari KTP...</span>
+            </div>
+
+            <!-- Tombol Unggah Alternatif Cepat -->
+            <label title="Pindai dari file gambar" class="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/85 hover:bg-slate-800 backdrop-blur-xs border border-white/15 text-xs font-medium text-slate-200 cursor-pointer transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span class="hidden sm:inline">Upload Foto</span>
+              <input id="file-upload-quick" type="file" accept="image/*" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Bar Kontrol Kunci Hasil Scan & Preprocessing -->
+        <div class="p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <button id="btn-lock-scan" type="button" class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all cursor-pointer">
+              <svg id="icon-unlocked" class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              <svg id="icon-locked" class="w-4 h-4 text-amber-600 hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span id="lock-btn-text">Kunci Hasil Scan</span>
+            </button>
+
+            <button id="btn-reset-form" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Reset Form</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 text-xs text-slate-500">
+            <span>Mode Kontras:</span>
+            <select id="contrast-mode" class="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-700 focus:outline-none focus:border-blue-500">
+              <option value="adaptive" selected>Otomatis (Grayscale + Kontras)</option>
+              <option value="high">Kontras Tinggi (Cahaya Redup)</option>
+              <option value="normal">Normal (Cahaya Terang)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Preview Debug Crop OCR (Opsional/Collapsible) -->
+        <details class="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+          <summary class="cursor-pointer hover:text-slate-800 font-medium select-none flex items-center justify-between">
+            <span>Diagnostik Pembacaan OCR (Area Terpotong & Teks Mentah)</span>
+          </summary>
+          <div class="mt-3 pb-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <p class="text-[11px] font-medium text-slate-600 mb-1">Pratinjau Frame Pra-Proses:</p>
+              <canvas id="ocr-canvas" class="w-full h-28 object-contain bg-slate-900 rounded border border-slate-200"></canvas>
+            </div>
+            <div>
+              <p class="text-[11px] font-medium text-slate-600 mb-1">Teks Mentah Terbaca:</p>
+              <pre id="raw-ocr-output" class="w-full h-28 overflow-auto p-2 bg-white border border-slate-200 rounded text-[10px] font-mono text-slate-700 whitespace-pre-wrap">Menunggu pemindaian...</pre>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- Kolom Kanan: Form Verifikasi & Input Data Warga -->
+      <section class="lg:col-span-6 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h2 class="text-sm font-semibold text-slate-800">Verifikasi Data Penduduk</h2>
+          </div>
+          <span id="form-state-badge" class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            Auto-Fill Aktif
+          </span>
+        </div>
+
+        <form id="ktp-form" class="p-5 space-y-4">
+          <!-- NIK (Highlight Utama) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="field-nik" class="block text-xs font-semibold text-slate-700">NIK (Nomor Induk Kependudukan) <span class="text-rose-500">*</span></label>
+              <span id="nik-counter" class="text-[11px] font-mono text-slate-400">0 / 16 digit</span>
+            </div>
+            <input type="text" id="field-nik" name="nik" maxlength="16" inputmode="numeric" placeholder="16 digit NIK" required
+              class="w-full px-3 py-2 text-sm font-mono tracking-wider bg-slate-50/50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+          </div>
+
+          <!-- Nama Lengkap -->
+          <div>
+            <label for="field-nama" class="block text-xs font-medium text-slate-700 mb-1">Nama Lengkap <span class="text-rose-500">*</span></label>
+            <input type="text" id="field-nama" name="nama" placeholder="Sesuai KTP" required
+              class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+          </div>
+
+          <!-- Tempat/Tgl Lahir & Jenis Kelamin -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label for="field-ttl" class="block text-xs font-medium text-slate-700 mb-1">Tempat / Tgl Lahir</label>
+              <input type="text" id="field-ttl" name="ttl" placeholder="KOTA, DD-MM-YYYY"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+            <div>
+              <label for="field-jk" class="block text-xs font-medium text-slate-700 mb-1">Jenis Kelamin</label>
+              <select id="field-jk" name="jk"
+                class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                <option value="">-- Pilih --</option>
+                <option value="LAKI-LAKI">LAKI-LAKI</option>
+                <option value="PEREMPUAN">PEREMPUAN</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Alamat & RT/RW -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div class="sm:col-span-2">
+              <label for="field-alamat" class="block text-xs font-medium text-slate-700 mb-1">Alamat</label>
+              <input type="text" id="field-alamat" name="alamat" placeholder="Nama Jalan / Dusun / Blok"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+            <div>
+              <label for="field-rtrw" class="block text-xs font-medium text-slate-700 mb-1">RT / RW</label>
+              <input type="text" id="field-rtrw" name="rtrw" placeholder="001/002"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+          </div>
+
+          <!-- Kel/Desa & Kecamatan -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label for="field-kelurahan" class="block text-xs font-medium text-slate-700 mb-1">Kelurahan / Desa</label>
+              <input type="text" id="field-kelurahan" name="kelurahan" placeholder="Nama Kelurahan/Desa"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+            <div>
+              <label for="field-kecamatan" class="block text-xs font-medium text-slate-700 mb-1">Kecamatan</label>
+              <input type="text" id="field-kecamatan" name="kecamatan" placeholder="Nama Kecamatan"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+          </div>
+
+          <!-- Agama, Status Perkawinan, Pekerjaan -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label for="field-agama" class="block text-xs font-medium text-slate-700 mb-1">Agama</label>
+              <select id="field-agama" name="agama"
+                class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                <option value="">-- Pilih --</option>
+                <option value="ISLAM">ISLAM</option>
+                <option value="KRISTEN">KRISTEN</option>
+                <option value="KATOLIK">KATOLIK</option>
+                <option value="HINDU">HINDU</option>
+                <option value="BUDDHA">BUDDHA</option>
+                <option value="KHONGHUCU">KHONGHUCU</option>
+              </select>
+            </div>
+            <div>
+              <label for="field-status" class="block text-xs font-medium text-slate-700 mb-1">Status Perkawinan</label>
+              <select id="field-status" name="status"
+                class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                <option value="">-- Pilih --</option>
+                <option value="BELUM KAWIN">BELUM KAWIN</option>
+                <option value="KAWIN">KAWIN</option>
+                <option value="CERAI HIDUP">CERAI HIDUP</option>
+                <option value="CERAI MATI">CERAI MATI</option>
+              </select>
+            </div>
+            <div>
+              <label for="field-pekerjaan" class="block text-xs font-medium text-slate-700 mb-1">Pekerjaan</label>
+              <input type="text" id="field-pekerjaan" name="pekerjaan" placeholder="Contoh: WIRASWASTA"
+                class="w-full px-3 py-2 text-sm uppercase bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all" />
+            </div>
+          </div>
+
+          <!-- Tombol Aksi Simpan -->
+          <div class="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <p class="text-[11px] text-slate-500">Periksa kembali kesesuaian ejaan sebelum menyimpan data.</p>
+            <button type="submit" id="btn-save-record" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg shadow-xs transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Simpan ke Daftar</span>
+            </button>
+          </div>
+        </form>
+      </section>
     </div>
 
-    <!-- Tombol Ambil Foto KTP -->
-    <div class="mb-4">
-      <label class="block text-sm font-semibold text-slate-700 mb-1.5">Foto KTP</label>
-      <input type="file" accept="image/*" capture="environment" id="ktpInput" class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm bg-white file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#0C210E] file:text-white">
+    <!-- Bagian Bawah: Daftar Warga Tersimpan & Ekspor Spreadsheet -->
+    <section class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+      <div class="p-4 sm:px-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/60">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold text-slate-900">Data Warga Tercatat</h2>
+              <span id="record-count-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-200/80 text-slate-700">0</span>
+            </div>
+            <p class="text-xs text-slate-500">Tersimpan otomatis di penyimpanan lokal browser dan siap diekspor ke Spreadsheet.</p>
+          </div>
+        </div>
+
+        <!-- Toolbar Ekspor Spreadsheet -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Salin Format TSV (Paste langsung ke Google Sheets / Excel) -->
+          <button id="btn-copy-tsv" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors cursor-pointer">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+            <span>Salin Format Spreadsheet</span>
+          </button>
+
+          <!-- Unduh File CSV -->
+          <button id="btn-download-csv" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Unduh CSV (.csv)</span>
+          </button>
+
+          <!-- Hapus Semua Data -->
+          <button id="btn-clear-all" type="button" title="Hapus semua riwayat" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-600 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 rounded-lg transition-colors cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span class="hidden sm:inline">Bersihkan</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabel Responsif -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <th class="py-3 px-4 w-10">No</th>
+              <th class="py-3 px-4">NIK</th>
+              <th class="py-3 px-4">Nama Lengkap</th>
+              <th class="py-3 px-4">Tempat/Tgl Lahir</th>
+              <th class="py-3 px-4">L/P</th>
+              <th class="py-3 px-4">Alamat & RT/RW</th>
+              <th class="py-3 px-4">Kel/Desa & Kec</th>
+              <th class="py-3 px-4">Agama & Status</th>
+              <th class="py-3 px-4">Pekerjaan</th>
+              <th class="py-3 px-4 text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody" class="divide-y divide-slate-100 text-xs text-slate-700">
+            <!-- Baris data dirender via JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="py-12 px-4 text-center">
+        <div class="w-11 h-11 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <p class="text-sm font-medium text-slate-700">Belum ada data warga yang dicatat</p>
+        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">Arahkan kamera ke kartu KTP hingga kolom terisi otomatis, verifikasi data, lalu tekan tombol "Simpan ke Daftar".</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal Pengaturan Google Apps Script Webhook -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Integrasi Langsung Google Spreadsheet</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Kirim otomatis setiap data yang disimpan ke Google Sheets melalui Apps Script Web App.</p>
+        </div>
+        <button id="btn-close-settings" type="button" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-600">
+        <div>
+          <label for="webhook-url-input" class="block font-semibold text-slate-800 mb-1.5">URL Web App Google Apps Script (Opsional)</label>
+          <input type="url" id="webhook-url-input" placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+            class="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600" />
+          <p class="text-[11px] text-slate-500 mt-1">Jika dikosongkan, data tetap tersimpan di browser dan dapat diekspor via CSV atau Salin TSV.</p>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-800">Panduan Singkat Setup Google Sheets:</span>
+            <button id="btn-copy-script" type="button" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer">Salin Kode Script</button>
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
+            <li>Buka Google Spreadsheet baru Anda, lalu klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
+            <li>Hapus kode bawaan dan tempel kode di bawah ini, lalu simpan.</li>
+            <li>Klik <strong>Terapkan (Deploy) &gt; Deployment baru</strong>, pilih jenis <strong>Aplikasi web</strong>.</li>
+            <li>Atur <em>Yang memiliki akses</em> menjadi <strong>Siapa saja (Anyone)</strong>, lalu salin URL Web App ke kolom di atas.</li>
+          </ol>
+          <pre id="apps-script-code" class="p-3 bg-slate-900 text-slate-100 rounded-lg text-[11px] font-mono overflow-x-auto leading-relaxed">function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "Waktu Input", "NIK", "Nama Lengkap", "Tempat/Tgl Lahir",
+      "Jenis Kelamin", "Alamat", "RT/RW", "Kelurahan/Desa",
+      "Kecamatan", "Agama", "Status Perkawinan", "Pekerjaan"
+    ]);
+  }
+  
+  sheet.appendRow([
+    new Date(),
+    "'" + data.nik,
+    data.nama,
+    data.ttl,
+    data.jk,
+    data.alamat,
+    data.rtrw,
+    data.kelurahan,
+    data.kecamatan,
+    data.agama,
+    data.status,
+    data.pekerjaan
+  ]);
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+        <button id="btn-cancel-settings" type="button" class="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer">
+          Batal
+        </button>
+        <button id="btn-save-settings" type="button" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer">
+          Simpan Pengaturan
+        </button>
+      </div>
     </div>
+  </div>
 
-    <div id="statusText" class="text-xs text-amber-600 font-semibold mb-4 hidden">Sedang membaca KTP...</div>
-
-    <!-- Kotak Hasil Preview -->
-    <div class="space-y-3 text-sm">
-      <div>
-        <label class="block font-semibold text-slate-700 mb-1">NIK</label>
-        <input type="text" id="resNik" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="NIK">
+  <!-- Modal Konfirmasi Bersihkan Data (Pengganti confirm()) -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-xl shadow-xl max-w-sm w-full p-5 space-y-4">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900">Hapus Semua Data Warga?</h3>
+          <p class="text-xs text-slate-500 mt-1">Seluruh daftar warga yang tersimpan di browser ini akan dihapus permanen. Pastikan Anda sudah mengunduh CSV terlebih dahulu.</p>
+        </div>
       </div>
-      <div>
-        <label class="block font-semibold text-slate-700 mb-1">Nama Lengkap</label>
-        <input type="text" id="resNama" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="Nama">
-      </div>
-      <div>
-        <label class="block font-semibold text-slate-700 mb-1">Tempat Lahir</label>
-        <input type="text" id="resTempatLahir" class="w-full border border-gray-200 rounded-xl px-4 py-2 bg-gray-50" placeholder="Tempat Lahir">
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button id="btn-cancel-clear" type="button" class="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer">Batal</button>
+        <button id="btn-confirm-clear" type="button" class="px-3.5 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg cursor-pointer">Ya, Hapus Semua</button>
       </div>
     </div>
-
-    <!-- Tombol Kirim -->
-    <button onclick="prosesDanKirim()" class="w-full mt-6 bg-[#0C210E] hover:bg-[#1A3010] text-white py-3 rounded-xl text-sm font-bold transition-colors">
-      Simpan ke Sheets & Isi Form
-    </button>
   </div>
 
   <script>
-    // ⚠️ MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI:
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf0Q0xj9X86v2V2meg0ggwyN7KFb0h0m3stbiFfMPtHaIw5odBpoS7YlxABiinZkbM/exec";
+    /**
+     * Aplikasi Pemindai KTP Real-Time & Pencatat Data Warga
+     * Menggunakan Tesseract.js Worker untuk OCR berulang tanpa tombol capture.
+     */
+    (function () {
+      // State Aplikasi
+      const STORAGE_KEY = 'ktp_scanner_records_v1';
+      const WEBHOOK_KEY = 'ktp_scanner_webhook_url_v1';
 
-    // 1. Membaca gambar KTP menggunakan OCR
-    document.getElementById('ktpInput').addEventListener('change', async function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+      let records = [];
+      let webhookUrl = '';
+      let stream = null;
+      let facingMode = 'environment';
+      let isCameraActive = false;
+      let isScanLocked = false;
+      let isProcessingOCR = false;
+      let ocrWorker = null;
+      let isWorkerReady = false;
+      let scanIntervalId = null;
 
-      const statusEl = document.getElementById('statusText');
-      statusEl.classList.remove('hidden');
-      statusEl.innerText = "Memproses teks KTP...";
+      // Referensi Elemen DOM
+      const videoEl = document.getElementById('camera-video');
+      const canvasEl = document.getElementById('ocr-canvas');
+      const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      const rawOutputEl = document.getElementById('raw-ocr-output');
 
-      try {
-        const { data: { text } } = await Tesseract.recognize(file, 'ind');
-        statusEl.innerText = "Selesai dibaca!";
-        parsingTeksKtp(text);
-      } catch (err) {
-        statusEl.innerText = "Gagal membaca KTP.";
+      const cameraPlaceholder = document.getElementById('camera-placeholder');
+      const cameraErrorMsg = document.getElementById('camera-error-msg');
+      const ktpOverlay = document.getElementById('ktp-overlay');
+      const ktpGuideFrame = document.getElementById('ktp-guide-frame');
+      const scanLaser = document.getElementById('scan-laser');
+
+      const scanStatusDot = document.getElementById('scan-status-dot');
+      const scanStatusText = document.getElementById('scan-status-text');
+      const engineDot = document.getElementById('engine-dot');
+      const engineText = document.getElementById('engine-text');
+
+      const btnSwitchCamera = document.getElementById('btn-switch-camera');
+      const btnToggleCamera = document.getElementById('btn-toggle-camera');
+      const btnRetryCamera = document.getElementById('btn-retry-camera');
+      const camBtnDot = document.getElementById('cam-btn-dot');
+      const camBtnText = document.getElementById('cam-btn-text');
+
+      const btnLockScan = document.getElementById('btn-lock-scan');
+      const iconUnlocked = document.getElementById('icon-unlocked');
+      const iconLocked = document.getElementById('icon-locked');
+      const lockBtnText = document.getElementById('lock-btn-text');
+      const formStateBadge = document.getElementById('form-state-badge');
+      const contrastModeSelect = document.getElementById('contrast-mode');
+
+      // Form Fields
+      const formEl = document.getElementById('ktp-form');
+      const fields = {
+        nik: document.getElementById('field-nik'),
+        nama: document.getElementById('field-nama'),
+        ttl: document.getElementById('field-ttl'),
+        jk: document.getElementById('field-jk'),
+        alamat: document.getElementById('field-alamat'),
+        rtrw: document.getElementById('field-rtrw'),
+        kelurahan: document.getElementById('field-kelurahan'),
+        kecamatan: document.getElementById('field-kecamatan'),
+        agama: document.getElementById('field-agama'),
+        status: document.getElementById('field-status'),
+        pekerjaan: document.getElementById('field-pekerjaan')
+      };
+      const nikCounter = document.getElementById('nik-counter');
+
+      // Tabel & Ekspor
+      const recordsTbody = document.getElementById('records-tbody');
+      const emptyState = document.getElementById('empty-state');
+      const recordCountBadge = document.getElementById('record-count-badge');
+
+      // Modal Settings & Confirm
+      const settingsModal = document.getElementById('settings-modal');
+      const webhookUrlInput = document.getElementById('webhook-url-input');
+      const webhookActiveDot = document.getElementById('webhook-active-dot');
+      const confirmModal = document.getElementById('confirm-modal');
+
+      /**
+       * Menampilkan Notifikasi Toast Minimalis (Tanpa Emoji)
+       */
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'pointer-events-auto flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-md text-xs font-medium transition-all duration-300 transform translate-y-2 opacity-0 bg-white';
+
+        let iconSvg = '';
+        if (type === 'success') {
+          toast.classList.add('border-emerald-200', 'text-emerald-800', 'bg-emerald-50/95');
+          iconSvg = '<svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        } else if (type === 'error') {
+          toast.classList.add('border-rose-200', 'text-rose-800', 'bg-rose-50/95');
+          iconSvg = '<svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+        } else if (type === 'warning') {
+          toast.classList.add('border-amber-200', 'text-amber-800', 'bg-amber-50/95');
+          iconSvg = '<svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+        } else {
+          toast.classList.add('border-slate-200', 'text-slate-800', 'bg-white');
+          iconSvg = '<svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        }
+
+        toast.innerHTML = `${iconSvg}<span>${message}</span>`;
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+          toast.classList.remove('translate-y-2', 'opacity-0');
+        });
+
+        setTimeout(() => {
+          toast.classList.add('opacity-0', 'translate-y-2');
+          setTimeout(() => toast.remove(), 300);
+        }, 3200);
       }
-    });
 
-// 2. Ekstraksi teks NIK dengan Koreksi Cerdas 16 Digit
-    function parsingTeksKtp(text) {
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      let nik = "", nama = "", tempatLahir = "";
+      /**
+       * Update Status UI Pemindaian Real-time
+       */
+      function setScanStatus(state, text) {
+        scanStatusText.textContent = text;
+        scanStatusDot.className = 'w-2 h-2 rounded-full';
 
-      lines.forEach(line => {
-        // Bersihkan karakter selain angka
-        let cleanLine = line.replace(/\D/g, '');
-        
-        // Kasus A: Jika terbaca 16 digit utuh
-        if (cleanLine.length === 16 && !nik) {
-          nik = cleanLine;
+        if (state === 'searching') {
+          scanStatusDot.classList.add('bg-blue-400', 'animate-ping');
+          ktpGuideFrame.classList.remove('border-emerald-400', 'border-amber-400');
+          ktpGuideFrame.classList.add('border-white/60');
+        } else if (state === 'scanning') {
+          scanStatusDot.classList.add('bg-amber-400', 'animate-pulse');
+        } else if (state === 'detected') {
+          scanStatusDot.classList.add('bg-emerald-400');
+          ktpGuideFrame.classList.remove('border-white/60', 'border-amber-400');
+          ktpGuideFrame.classList.add('border-emerald-400');
+        } else if (state === 'locked') {
+          scanStatusDot.classList.add('bg-amber-400');
+          ktpGuideFrame.classList.remove('border-white/60', 'border-emerald-400');
+          ktpGuideFrame.classList.add('border-amber-400');
+        } else {
+          scanStatusDot.classList.add('bg-slate-400');
         }
-        
-        // Kasus B: Jika 2 angka depan terpotong (hanya terbaca 14 digit)
-        // Kita otomatis tambahkan prefiks wilayah Anda di depan (Contoh: "16" untuk wilayah Anda)
-        else if (cleanLine.length >= 13 && cleanLine.length <= 15 && !nik) {
-          let prefixWilayah = "16"; // ⚠️ Ganti dengan 2 angka awal NIK daerah Anda jika berbeda
-          nik = prefixWilayah + cleanLine.substring(cleanLine.length - 14);
-          if (nik.length > 16) nik = nik.substring(0, 16);
+      }
+
+      /**
+       * Inisialisasi Tesseract.js Worker
+       */
+      async function initOCRWorker() {
+        try {
+          // Menggunakan bahasa Indonesia ('ind') dengan fallback otomatis ke 'eng'
+          ocrWorker = await Tesseract.createWorker('ind', 1, {
+            logger: () => {}
+          });
+          isWorkerReady = true;
+          engineDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+          engineText.textContent = 'OCR Engine Siap';
+        } catch (err) {
+          console.warn('Gagal memuat model bahasa ind, mencoba eng:', err);
+          try {
+            ocrWorker = await Tesseract.createWorker('eng');
+            isWorkerReady = true;
+            engineDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+            engineText.textContent = 'OCR Engine Siap (ENG)';
+          } catch (fallbackErr) {
+            console.error('OCR Worker gagal diinisialisasi:', fallbackErr);
+            engineDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+            engineText.textContent = 'OCR Gagal Dimuat';
+            showToast('Gagal memuat pustaka OCR. Periksa koneksi internet Anda.', 'error');
+          }
+        }
+      }
+
+      /**
+       * Memulai Live Camera Stream
+       */
+      async function startCamera() {
+        stopCamera(false);
+        try {
+          const constraints = {
+            audio: false,
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          };
+
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          videoEl.srcObject = stream;
+          await videoEl.play();
+
+          isCameraActive = true;
+          cameraPlaceholder.classList.add('hidden');
+          ktpOverlay.classList.remove('hidden');
+          camBtnDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+          camBtnText.textContent = 'Kamera Aktif';
+
+          if (!isScanLocked) {
+            setScanStatus('searching', 'Mencari KTP...');
+          }
+          startRealTimeLoop();
+        } catch (err) {
+          console.error('Camera Error:', err);
+          isCameraActive = false;
+          cameraPlaceholder.classList.remove('hidden');
+          ktpOverlay.classList.add('hidden');
+          camBtnDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+          camBtnText.textContent = 'Kamera Nonaktif';
+          setScanStatus('idle', 'Kamera tidak tersedia');
+
+          if (err.name === 'NotAllowedError') {
+            cameraErrorMsg.textContent = 'Izin akses kamera ditolak oleh pengguna';
+          } else if (err.name === 'NotFoundError') {
+            cameraErrorMsg.textContent = 'Perangkat kamera tidak ditemukan';
+          } else {
+            cameraErrorMsg.textContent = 'Tidak dapat mengakses kamera (' + err.message + ')';
+          }
+        }
+      }
+
+      /**
+       * Menghentikan Kamera
+       */
+      function stopCamera(showPlaceholder = true) {
+        if (scanIntervalId) {
+          clearInterval(scanIntervalId);
+          scanIntervalId = null;
+        }
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          stream = null;
+        }
+        isCameraActive = false;
+        if (showPlaceholder) {
+          cameraPlaceholder.classList.remove('hidden');
+          ktpOverlay.classList.add('hidden');
+          cameraErrorMsg.textContent = 'Kamera dimatikan sementara';
+          camBtnDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+          camBtnText.textContent = 'Kamera Mati';
+          setScanStatus('idle', 'Pemindaian dijeda');
+        }
+      }
+
+      /**
+       * Pra-pemrosesan Gambar (Cropping area teks KTP + Grayscale + Peningkatan Kontras)
+       */
+      function preprocessFrameToCanvas(sourceElement, isVideo = true) {
+        const srcW = isVideo ? sourceElement.videoWidth : sourceElement.naturalWidth;
+        const srcH = isVideo ? sourceElement.videoHeight : sourceElement.naturalHeight;
+        if (!srcW || !srcH) return false;
+
+        let cropX = 0;
+        let cropY = 0;
+        let cropW = srcW;
+        let cropH = srcH;
+
+        if (isVideo) {
+          // Hitung koordinat relatif bingkai KTP di dalam viewport video (object-cover)
+          const containerRect = videoEl.getBoundingClientRect();
+          const frameRect = ktpGuideFrame.getBoundingClientRect();
+
+          const videoAspect = srcW / srcH;
+          const containerAspect = containerRect.width / containerRect.height;
+
+          let renderW, renderH, offsetX, offsetY;
+          if (videoAspect > containerAspect) {
+            renderH = containerRect.height;
+            renderW = renderH * videoAspect;
+            offsetX = (containerRect.width - renderW) / 2;
+            offsetY = 0;
+          } else {
+            renderW = containerRect.width;
+            renderH = renderW / videoAspect;
+            offsetX = 0;
+            offsetY = (containerRect.height - renderH) / 2;
+          }
+
+          const scaleX = srcW / renderW;
+          const scaleY = srcH / renderH;
+
+          const relLeft = frameRect.left - containerRect.left - offsetX;
+          const relTop = frameRect.top - containerRect.top - offsetY;
+
+          // Fokus crop pada 72% bagian kiri kartu KTP (tempat seluruh teks NIK & Biodata berada, menghindari noise pas foto)
+          cropX = Math.max(0, relLeft * scaleX);
+          cropY = Math.max(0, relTop * scaleY);
+          cropW = Math.min(srcW - cropX, (frameRect.width * 0.72) * scaleX);
+          cropH = Math.min(srcH - cropY, frameRect.height * scaleY);
+        } else {
+          // Untuk unggahan gambar statis, ambil 75% sisi kiri gambar
+          cropW = srcW * 0.75;
         }
 
-        // Cari indikasi baris NIK secara spesifik
-        if (line.toUpperCase().includes("NIK") && !nik) {
-          let parts = line.split(":");
-          if (parts.length > 1) {
-            let extracted = parts[1].replace(/\D/g, '');
-            if (extracted.length >= 12) {
-              if (extracted.length === 14) extracted = "16" + extracted; // Otomatis tambahkan 2 digit jika kurang
-              nik = extracted.substring(0, 16);
+        // Resolusi optimal untuk OCR cepat dan akurat
+        const targetWidth = Math.min(1000, Math.max(640, Math.round(cropW)));
+        const targetHeight = Math.round(targetWidth * (cropH / cropW));
+
+        canvasEl.width = targetWidth;
+        canvasEl.height = targetHeight;
+
+        ctx.drawImage(sourceElement, cropX, cropY, cropW, cropH, 0, 0, targetWidth, targetHeight);
+
+        // Manipulasi Pixel: Grayscale & Contrast Enhancement
+        const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+        const data = imgData.data;
+        const mode = contrastModeSelect.value;
+
+        // Faktor kontras berdasarkan pilihan pengguna
+        let contrastFactor = 1.45;
+        if (mode === 'high') contrastFactor = 1.85;
+        if (mode === 'normal') contrastFactor = 1.15;
+
+        const intercept = 128 * (1 - contrastFactor);
+
+        for (let i = 0; i < data.length; i += 4) {
+          // Luminance grayscale
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          let enhanced = gray * contrastFactor + intercept;
+          enhanced = enhanced < 0 ? 0 : enhanced > 255 ? 255 : enhanced;
+
+          data[i] = enhanced;
+          data[i + 1] = enhanced;
+          data[i + 2] = enhanced;
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        return true;
+      }
+
+      /**
+       * Loop Pemindaian Otomatis Berkala (Setiap 1.8 detik)
+       */
+      function startRealTimeLoop() {
+        if (scanIntervalId) clearInterval(scanIntervalId);
+
+        scanIntervalId = setInterval(async () => {
+          if (!isCameraActive || !isWorkerReady || isScanLocked || isProcessingOCR) return;
+          if (videoEl.readyState < 2) return;
+
+          await runOCROnSource(videoEl, true);
+        }, 1800);
+      }
+
+      /**
+       * Eksekusi OCR pada Sumber (Video Frame atau Image Element)
+       */
+      async function runOCROnSource(sourceEl, isVideo = true) {
+        if (!isWorkerReady || isProcessingOCR) return;
+        isProcessingOCR = true;
+
+        if (!isScanLocked) {
+          setScanStatus('scanning', 'Memindai teks...');
+        }
+
+        try {
+          const ok = preprocessFrameToCanvas(sourceEl, isVideo);
+          if (!ok) {
+            isProcessingOCR = false;
+            return;
+          }
+
+          const { data: { text } } = await ocrWorker.recognize(canvasEl);
+          rawOutputEl.textContent = text.trim() || '(Tidak ada teks terbaca)';
+
+          const parsed = parseKTPText(text);
+          const hasUsefulData = parsed.nik || parsed.nama || parsed.alamat;
+
+          if (hasUsefulData && !isScanLocked) {
+            applyParsedDataToForm(parsed);
+            setScanStatus('detected', parsed.nik ? 'Data terdeteksi (NIK Valid)' : 'Data terdeteksi');
+          } else if (!isScanLocked) {
+            setScanStatus('searching', 'Mencari KTP...');
+          }
+        } catch (err) {
+          console.error('OCR Frame Error:', err);
+          if (!isScanLocked) {
+            setScanStatus('searching', 'Mencari KTP...');
+          }
+        } finally {
+          isProcessingOCR = false;
+        }
+      }
+
+      /**
+       * Parser Cerdas Teks KTP Indonesia
+       * Membersihkan noise karakter OCR dan mengekstrak field standar KTP.
+       */
+      function parseKTPText(rawText) {
+        const result = {
+          nik: '',
+          nama: '',
+          ttl: '',
+          jk: '',
+          alamat: '',
+          rtrw: '',
+          kelurahan: '',
+          kecamatan: '',
+          agama: '',
+          status: '',
+          pekerjaan: ''
+        };
+
+        if (!rawText) return result;
+
+        // Normalisasi baris
+        const lines = rawText
+          .split('\n')
+          .map(l => l.replace(/[|—_~`]/g, ' ').replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+
+        const fullUpper = lines.join('\n').toUpperCase();
+
+        // 1. Ekstraksi NIK (16 Digit - toleransi salah baca OCR seperti O->0, I/L->1, S->5, B->8)
+        const nikLineMatch = fullUpper.match(/(?:NIK|N1K|MK)\s*[:\-]?\s*([0-9OILSBZ\s]{14,22})/);
+        if (nikLineMatch) {
+          const cleanedNik = normalizeDigits(nikLineMatch[1]).replace(/\D/g, '');
+          if (cleanedNik.length >= 16) {
+            result.nik = cleanedNik.slice(0, 16);
+          }
+        }
+        // Fallback cari deretan 16 digit di mana saja
+        if (!result.nik) {
+          const any16 = normalizeDigits(fullUpper).match(/\b\d{16}\b/);
+          if (any16) result.nik = any16[0];
+        }
+
+        // Helper ambil nilai setelah label
+        const extractAfterLabel = (regexList) => {
+          for (let i = 0; i < lines.length; i++) {
+            const upperLine = lines[i].toUpperCase();
+            for (const regex of regexList) {
+              const m = upperLine.match(regex);
+              if (m && m[1]) {
+                const val = m[1].replace(/^[:\-\.\s]+/, '').trim();
+                if (val.length > 1) return val;
+              }
             }
           }
+          return '';
+        };
+
+        // 2. Nama
+        let nama = extractAfterLabel([
+          /(?:NAMA|NAWA|NANA)\s*[:\-]?\s*([A-Z\s\.,']+)/
+        ]);
+        if (nama) {
+          nama = nama.replace(/[^A-Z\s\.,']/g, '').trim();
+          result.nama = nama;
         }
 
-        // Cari indikasi Nama
-        if (line.toUpperCase().includes("NAMA") && !nama) {
-          let parts = line.split(":");
-          if (parts.length > 1 && parts[1].trim().length > 2) {
-            nama = parts[1].trim();
+        // 3. Tempat / Tgl Lahir
+        let ttl = extractAfterLabel([
+          /(?:TEMPAT|TEINPAT|LAHIR|TGL\s*LAHIR)\s*[:\-]?\s*([A-Z0-9\s,\-\/]+)/
+        ]);
+        if (ttl) {
+          // Rapikan format tanggal DD-MM-YYYY jika terbaca
+          ttl = ttl.replace(/(\d{2})[\s\.\/](\d{2})[\s\.\/](\d{4})/, '$1-$2-$3');
+          result.ttl = ttl.replace(/[^A-Z0-9\s,\-]/g, '').trim();
+        } else {
+          // Cari pola KOTA, DD-MM-YYYY
+          const ttlMatch = fullUpper.match(/([A-Z]{3,20})[,\s]+(\d{2}[-\/\.]\d{2}[-\/\.]\d{4})/);
+          if (ttlMatch) {
+            result.ttl = `${ttlMatch[1]}, ${ttlMatch[2].replace(/[\/\.]/g, '-')}`;
           }
         }
 
-        // Cari indikasi Tempat Lahir
-        if ((line.toUpperCase().includes("LAHIR") || line.toUpperCase().includes("TEMPAT")) && !tempatLahir) {
-          let parts = line.split(":");
-          if (parts.length > 1) {
-            tempatLahir = parts[1].split(",")[0].replace(/[^a-zA-Z\s]/g, '').trim();
+        // 4. Jenis Kelamin
+        if (/PEREMPUAN|PEREMPUA|WANITA/.test(fullUpper)) {
+          result.jk = 'PEREMPUAN';
+        } else if (/LAKI[\s\-]*LAKI|LAKI/.test(fullUpper)) {
+          result.jk = 'LAKI-LAKI';
+        }
+
+        // 5. Alamat
+        let alamat = extractAfterLabel([
+          /(?:ALAMAT|ALANAT|ALAINAT)\s*[:\-]?\s*([A-Z0-9\s\.,\-\/]+)/
+        ]);
+        if (alamat) {
+          result.alamat = alamat.replace(/[^A-Z0-9\s\.,\-\/]/g, '').trim();
+        }
+
+        // 6. RT / RW
+        const rtrwMatch = normalizeDigits(fullUpper).match(/(?:RT\s*\/?\s*RW|RT|RW)\s*[:\-]?\s*(\d{1,3})\s*[\/\\|\-]\s*(\d{1,3})/);
+        if (rtrwMatch) {
+          const rt = rtrwMatch[1].padStart(3, '0');
+          const rw = rtrwMatch[2].padStart(3, '0');
+          result.rtrw = `${rt}/${rw}`;
+        }
+
+        // 7. Kelurahan / Desa
+        let kel = extractAfterLabel([
+          /(?:KEL\s*\/?\s*DESA|KELURAHAN|DESA)\s*[:\-]?\s*([A-Z\s\.,\-]+)/
+        ]);
+        if (kel) {
+          result.kelurahan = kel.replace(/[^A-Z\s\.,\-]/g, '').trim();
+        }
+
+        // 8. Kecamatan
+        let kec = extractAfterLabel([
+          /(?:KECAMATAN|KEC)\s*[:\-]?\s*([A-Z\s\.,\-]+)/
+        ]);
+        if (kec) {
+          result.kecamatan = kec.replace(/[^A-Z\s\.,\-]/g, '').trim();
+        }
+
+        // 9. Agama
+        const agamaList = ['ISLAM', 'KRISTEN', 'KATOLIK', 'HINDU', 'BUDDHA', 'KHONGHUCU'];
+        for (const ag of agamaList) {
+          if (fullUpper.includes(ag)) {
+            result.agama = ag;
+            break;
           }
+        }
+
+        // 10. Status Perkawinan
+        if (/BELUM\s*KAWIN/.test(fullUpper)) {
+          result.status = 'BELUM KAWIN';
+        } else if (/CERAI\s*HIDUP/.test(fullUpper)) {
+          result.status = 'CERAI HIDUP';
+        } else if (/CERAI\s*MATI/.test(fullUpper)) {
+          result.status = 'CERAI MATI';
+        } else if (/\bKAWIN\b/.test(fullUpper)) {
+          result.status = 'KAWIN';
+        }
+
+        // 11. Pekerjaan
+        let pekerjaan = extractAfterLabel([
+          /(?:PEKERJAAN|PEKERJAA)\s*[:\-]?\s*([A-Z\s\/\-]+)/
+        ]);
+        if (pekerjaan) {
+          result.pekerjaan = pekerjaan.replace(/[^A-Z\s\/\-]/g, '').trim();
+        }
+
+        return result;
+      }
+
+      /**
+       * Konversi karakter huruf yang sering tertukar dengan angka saat OCR
+       */
+      function normalizeDigits(str) {
+        return str
+          .replace(/[OQ]/g, '0')
+          .replace(/[IL]/g, '1')
+          .replace(/Z/g, '2')
+          .replace(/S/g, '5')
+          .replace(/B/g, '8');
+      }
+
+      /**
+       * Mengisi Form Secara Cerdas (Tidak menimpa field yang sedang diketik pengguna)
+       */
+      function applyParsedDataToForm(parsed) {
+        const activeEl = document.activeElement;
+
+        Object.keys(parsed).forEach(key => {
+          const val = parsed[key];
+          const input = fields[key];
+          if (!input || !val) return;
+          // Jangan ganggu jika user sedang fokus mengetik di input tersebut
+          if (activeEl === input) return;
+
+          // Untuk NIK, hanya update jika panjangnya 16 digit atau lebih baik dari yang ada
+          if (key === 'nik') {
+            if (val.length === 16) {
+              input.value = val;
+              updateNikCounter();
+            }
+          } else {
+            // Update field jika sebelumnya kosong atau hasil baru lebih lengkap
+            if (!input.value || val.length >= input.value.length) {
+              input.value = val;
+            }
+          }
+        });
+      }
+
+      /**
+       * Update Penghitung Digit NIK
+       */
+      function updateNikCounter() {
+        const len = fields.nik.value.replace(/\D/g, '').length;
+        nikCounter.textContent = `${len} / 16 digit`;
+        if (len === 16) {
+          nikCounter.className = 'text-[11px] font-mono font-semibold text-emerald-600';
+        } else {
+          nikCounter.className = 'text-[11px] font-mono text-slate-400';
+        }
+      }
+
+      /**
+       * Toggle Kunci Hasil Scan
+       */
+      function toggleScanLock(forceState = null) {
+        isScanLocked = forceState !== null ? forceState : !isScanLocked;
+
+        if (isScanLocked) {
+          btnLockScan.classList.remove('bg-white', 'text-slate-700', 'border-slate-300');
+          btnLockScan.classList.add('bg-amber-50', 'text-amber-800', 'border-amber-300');
+          iconUnlocked.classList.add('hidden');
+          iconLocked.classList.remove('hidden');
+          lockBtnText.textContent = 'Hasil Scan Terkunci';
+          formStateBadge.textContent = 'Terkunci (Edit Manual)';
+          formStateBadge.className = 'text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200';
+          scanLaser.classList.add('hidden');
+          setScanStatus('locked', 'Hasil dikunci - Silakan verifikasi');
+        } else {
+          btnLockScan.classList.add('bg-white', 'text-slate-700', 'border-slate-300');
+          btnLockScan.classList.remove('bg-amber-50', 'text-amber-800', 'border-amber-300');
+          iconUnlocked.classList.remove('hidden');
+          iconLocked.classList.add('hidden');
+          lockBtnText.textContent = 'Kunci Hasil Scan';
+          formStateBadge.textContent = 'Auto-Fill Aktif';
+          formStateBadge.className = 'text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200';
+          scanLaser.classList.remove('hidden');
+          setScanStatus(isCameraActive ? 'searching' : 'idle', isCameraActive ? 'Mencari KTP...' : 'Pemindaian dijeda');
+        }
+      }
+
+      /**
+       * Reset Form ke Kondisi Awal
+       */
+      function resetForm() {
+        formEl.reset();
+        updateNikCounter();
+        toggleScanLock(false);
+        rawOutputEl.textContent = 'Menunggu pemindaian...';
+      }
+
+      /**
+       * Muat & Simpan Data ke LocalStorage
+       */
+      function loadRecordsFromStorage() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          records = saved ? JSON.parse(saved) : [];
+        } catch (e) {
+          records = [];
+        }
+
+        webhookUrl = localStorage.getItem(WEBHOOK_KEY) || '';
+        webhookUrlInput.value = webhookUrl;
+        updateWebhookIndicator();
+        renderTable();
+      }
+
+      function saveRecordsToStorage() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        } catch (e) {
+          showToast('Gagal menyimpan ke penyimpanan lokal browser.', 'error');
+        }
+        renderTable();
+      }
+
+      function updateWebhookIndicator() {
+        if (webhookUrl && webhookUrl.startsWith('http')) {
+          webhookActiveDot.classList.remove('hidden');
+        } else {
+          webhookActiveDot.classList.add('hidden');
+        }
+      }
+
+      /**
+       * Render Tabel Data Warga
+       */
+      function renderTable() {
+        recordCountBadge.textContent = records.length;
+
+        if (records.length === 0) {
+          recordsTbody.innerHTML = '';
+          emptyState.classList.remove('hidden');
+          return;
+        }
+
+        emptyState.classList.add('hidden');
+        recordsTbody.innerHTML = records.map((item, idx) => `
+          <tr class="hover:bg-slate-50/90 transition-colors">
+            <td class="py-3 px-4 font-mono text-slate-400">${idx + 1}</td>
+            <td class="py-3 px-4 font-mono font-medium text-slate-900 whitespace-nowrap">${escapeHtml(item.nik)}</td>
+            <td class="py-3 px-4 font-semibold text-slate-800 whitespace-nowrap">${escapeHtml(item.nama)}</td>
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(item.ttl || '-')}</td>
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${item.jk === 'LAKI-LAKI' ? 'L' : item.jk === 'PEREMPUAN' ? 'P' : '-'}</td>
+            <td class="py-3 px-4 text-slate-600 max-w-xs truncate" title="${escapeHtml(item.alamat)} RT/RW ${escapeHtml(item.rtrw)}">
+              ${escapeHtml(item.alamat || '-')} ${item.rtrw ? `<span class="text-slate-400">(${escapeHtml(item.rtrw)})</span>` : ''}
+            </td>
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(item.kelurahan || '-')}${item.kecamatan ? `, ${escapeHtml(item.kecamatan)}` : ''}</td>
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(item.agama || '-')}${item.status ? ` / ${escapeHtml(item.status)}` : ''}</td>
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(item.pekerjaan || '-')}</td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              <button type="button" data-delete-id="${item.id}" class="btn-delete-row inline-flex items-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Hapus baris">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      /**
+       * Kirim Data ke Google Apps Script Webhook (Jika Dikonfigurasi)
+       */
+      async function sendToGoogleSheetsWebhook(record) {
+        if (!webhookUrl) return;
+        try {
+          await fetch(webhookUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          });
+          showToast('Data berhasil dikirim ke Google Spreadsheet.', 'success');
+        } catch (err) {
+          console.error('Webhook Error:', err);
+          showToast('Tersimpan lokal, namun gagal mengirim ke Google Sheets.', 'warning');
+        }
+      }
+
+      /**
+       * Ekspor ke File CSV (.csv) siap buka di Google Sheets / Excel
+       */
+      function downloadCSV() {
+        if (records.length === 0) {
+          showToast('Tidak ada data untuk diunduh.', 'warning');
+          return;
+        }
+
+        const headers = [
+          'No', 'NIK', 'Nama Lengkap', 'Tempat/Tgl Lahir', 'Jenis Kelamin',
+          'Alamat', 'RT/RW', 'Kelurahan/Desa', 'Kecamatan',
+          'Agama', 'Status Perkawinan', 'Pekerjaan', 'Waktu Input'
+        ];
+
+        const csvRows = [headers.join(',')];
+
+        records.forEach((r, index) => {
+          // Gunakan format ="NIK" agar Excel/Sheets tidak mengubah 16 digit menjadi notasi ilmiah (E+15)
+          const row = [
+            index + 1,
+            `="${r.nik}"`,
+            `"${(r.nama || '').replace(/"/g, '""')}"`,
+            `"${(r.ttl || '').replace(/"/g, '""')}"`,
+            `"${(r.jk || '').replace(/"/g, '""')}"`,
+            `"${(r.alamat || '').replace(/"/g, '""')}"`,
+            `"${(r.rtrw || '').replace(/"/g, '""')}"`,
+            `"${(r.kelurahan || '').replace(/"/g, '""')}"`,
+            `"${(r.kecamatan || '').replace(/"/g, '""')}"`,
+            `"${(r.agama || '').replace(/"/g, '""')}"`,
+            `"${(r.status || '').replace(/"/g, '""')}"`,
+            `"${(r.pekerjaan || '').replace(/"/g, '""')}"`,
+            `"${r.timestamp || ''}"`
+          ];
+          csvRows.push(row.join(','));
+        });
+
+        // Tambahkan BOM UTF-8 agar karakter terbaca sempurna di Excel
+        const csvContent = '\uFEFF' + csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Data_Warga_KTP_${dateStr}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showToast('File CSV berhasil diunduh.', 'success');
+      }
+
+      /**
+       * Salin Format TSV (Tab Separated Values) untuk Paste langsung ke Google Sheets
+       */
+      function copyTSVToClipboard() {
+        if (records.length === 0) {
+          showToast('Tidak ada data untuk disalin.', 'warning');
+          return;
+        }
+
+        const headers = [
+          'No', 'NIK', 'Nama Lengkap', 'Tempat/Tgl Lahir', 'Jenis Kelamin',
+          'Alamat', 'RT/RW', 'Kelurahan/Desa', 'Kecamatan',
+          'Agama', 'Status Perkawinan', 'Pekerjaan'
+        ];
+
+        const tsvLines = [headers.join('\t')];
+        records.forEach((r, idx) => {
+          const clean = (v) => String(v || '').replace(/[\t\r\n]+/g, ' ').trim();
+          const row = [
+            idx + 1,
+            `'${clean(r.nik)}`, // Tanda petik tunggal menjaga 16 digit NIK tetap utuh sebagai teks di Google Sheets
+            clean(r.nama),
+            clean(r.ttl),
+            clean(r.jk),
+            clean(r.alamat),
+            clean(r.rtrw),
+            clean(r.kelurahan),
+            clean(r.kecamatan),
+            clean(r.agama),
+            clean(r.status),
+            clean(r.pekerjaan)
+          ];
+          tsvLines.push(row.join('\t'));
+        });
+
+        const tsvText = tsvLines.join('\n');
+
+        // Gunakan textarea + document.execCommand('copy') sesuai kompatibilitas iframe
+        const tempArea = document.createElement('textarea');
+        tempArea.value = tsvText;
+        tempArea.style.position = 'fixed';
+        tempArea.style.left = '-9999px';
+        document.body.appendChild(tempArea);
+        tempArea.select();
+
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            showToast('Format Spreadsheet disalin. Silakan Paste (Ctrl+V) di Google Sheets.', 'success');
+          } else {
+            showToast('Gagal menyalin data ke clipboard.', 'error');
+          }
+        } catch (err) {
+          showToast('Gagal menyalin data ke clipboard.', 'error');
+        } finally {
+          document.body.removeChild(tempArea);
+        }
+      }
+
+      /**
+       * Handler Unggah Gambar Statis KTP (Alternatif jika kamera tidak digunakan)
+       */
+      function handleImageUpload(file) {
+        if (!file) return;
+        if (!isWorkerReady) {
+          showToast('OCR Engine masih dimuat, tunggu beberapa detik.', 'warning');
+          return;
+        }
+
+        const img = new Image();
+        img.onload = async () => {
+          toggleScanLock(false);
+          showToast('Memproses gambar KTP yang diunggah...', 'info');
+          await runOCROnSource(img, false);
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(file);
+      }
+
+      // ================= EVENT LISTENERS =================
+
+      // Input NIK hanya angka
+      fields.nik.addEventListener('input', () => {
+        fields.nik.value = fields.nik.value.replace(/\D/g, '').slice(0, 16);
+        updateNikCounter();
+      });
+
+      // Otomatis kunci hasil scan jika pengguna mulai mengedit manual field apa pun
+      Object.values(fields).forEach(input => {
+        input.addEventListener('keydown', () => {
+          if (!isScanLocked && (fields.nik.value || fields.nama.value)) {
+            toggleScanLock(true);
+          }
+        });
+      });
+
+      // Kontrol Kamera
+      btnToggleCamera.addEventListener('click', () => {
+        if (isCameraActive) {
+          stopCamera(true);
+        } else {
+          startCamera();
         }
       });
 
-      // Masukkan ke kolom input web
-      if(nik) document.getElementById('resNik').value = nik;
-      if(nama) document.getElementById('resNama').value = nama;
-      if(tempatLahir) document.getElementById('resTempatLahir').value = tempatLahir;
-    }
-    
-    async function prosesDanKirim() {
-      const dataKtp = {
-        nik: document.getElementById('resNik').value,
-        nama: document.getElementById('resNama').value,
-        tempatLahir: document.getElementById('resTempatLahir').value,
-        noHp: "081954708657"
-      };
+      btnRetryCamera.addEventListener('click', startCamera);
 
-      if(!dataKtp.nik) {
-        alert("Data NIK masih kosong!");
-        return;
-      }
+      btnSwitchCamera.addEventListener('click', () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        startCamera();
+      });
 
-      // 1. Simpan ke LocalStorage dengan trik membuka halaman perantara atau langsung salin ke clipboard
-      // Agar 100% work tanpa ribet, kita salin data ke Clipboard dan buka aslinmas.id
-      const teksFormat = `NIK: ${dataKtp.nik}\nNama: ${dataKtp.nama}\nTempat Lahir: ${dataKtp.tempatLahir}`;
-      
-      await navigator.clipboard.writeText(teksFormat);
+      btnLockScan.addEventListener('click', () => toggleScanLock());
+      document.getElementById('btn-reset-form').addEventListener('click', resetForm);
 
-      // 2. Kirim ke Google Sheets
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(dataKtp)
-        });
-      } catch (error) {
-        console.error(error);
-      }
+      // Unggah File KTP
+      document.getElementById('file-upload-ktp').addEventListener('change', (e) => {
+        handleImageUpload(e.target.files[0]);
+        e.target.value = '';
+      });
+      document.getElementById('file-upload-quick').addEventListener('change', (e) => {
+        handleImageUpload(e.target.files[0]);
+        e.target.value = '';
+      });
 
-      alert("Data masuk Sheets & otomatis tersalin ke Clipboard HP! Silakan tap 1 kali lalu Paste (Tempel) di form aslinmas.id.");
-      
-      // Buka halaman aslinmas.id
-      window.location.href = "https://aslinmas.id/anggota/portal/edit";
-    }
-    
-    // 4. Skrip Pengisian Otomatis (JavaScript Injection)
-    function autofillWebsitePihakKetiga(data) {
-      // Mengisi NIK
-      const nikInput = document.querySelector('input[placeholder="NIK"]');
-      if (nikInput) {
-        nikInput.value = data.nik;
-        nikInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      // Submit Form Data Warga
+      formEl.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-      // Mengisi Nama Lengkap
-      const namaInput = document.querySelector('input[placeholder="Nama lengkap"]');
-      if (namaInput) {
-        namaInput.value = data.nama;
-        namaInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+        const nikVal = fields.nik.value.trim();
+        const namaVal = fields.nama.value.trim().toUpperCase();
 
-      // Mengisi Tempat Lahir (id="birth_place")
-      const tempatLahirInput = document.getElementById('birth_place');
-      if (tempatLahirInput) {
-        tempatLahirInput.value = data.tempatLahir;
-        tempatLahirInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    }
+        if (nikVal.length !== 16) {
+          showToast('NIK harus terdiri dari tepat 16 digit angka.', 'error');
+          fields.nik.focus();
+          return;
+        }
+        if (!namaVal) {
+          showToast('Nama lengkap wajib diisi.', 'error');
+          fields.nama.focus();
+          return;
+        }
+
+        // Cek duplikasi NIK
+        const isDuplicate = records.some(r => r.nik === nikVal);
+        if (isDuplicate) {
+          showToast('NIK tersebut sudah tercatat dalam daftar.', 'warning');
+          return;
+        }
+
+        const newRecord = {
+          id: Date.now().toString(),
+          nik: nikVal,
+          nama: namaVal,
+          ttl: fields.ttl.value.trim().toUpperCase(),
+          jk: fields.jk.value,
+          alamat: fields.alamat.value.trim().toUpperCase(),
+          rtrw: fields.rtrw.value.trim().toUpperCase(),
+          kelurahan: fields.kelurahan.value.trim().toUpperCase(),
+          kecamatan: fields.kecamatan.value.trim().toUpperCase(),
+          agama: fields.agama.value,
+          status: fields.status.value,
+          pekerjaan: fields.pekerjaan.value.trim().toUpperCase(),
+          timestamp: new Date().toLocaleString('id-ID')
+        };
+
+        records.unshift(newRecord);
+        saveRecordsToStorage();
+        showToast('Data warga berhasil disimpan ke daftar.', 'success');
+
+        if (webhookUrl) {
+          await sendToGoogleSheetsWebhook(newRecord);
+        }
+
+        resetForm();
+      });
+
+      // Hapus Baris Individual
+      recordsTbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-delete-row');
+        if (!btn) return;
+        const id = btn.getAttribute('data-delete-id');
+        records = records.filter(r => r.id !== id);
+        saveRecordsToStorage();
+        showToast('Baris data dihapus.', 'info');
+      });
+
+      // Ekspor & Salin
+      document.getElementById('btn-download-csv').addEventListener('click', downloadCSV);
+      document.getElementById('btn-copy-tsv').addEventListener('click', copyTSVToClipboard);
+
+      // Modal Konfirmasi Bersihkan Semua
+      document.getElementById('btn-clear-all').addEventListener('click', () => {
+        if (records.length === 0) {
+          showToast('Daftar data sudah kosong.', 'info');
+          return;
+        }
+        confirmModal.classList.remove('hidden');
+      });
+
+      document.getElementById('btn-cancel-clear').addEventListener('click', () => {
+        confirmModal.classList.add('hidden');
+      });
+
+      document.getElementById('btn-confirm-clear').addEventListener('click', () => {
+        records = [];
+        saveRecordsToStorage();
+        confirmModal.classList.add('hidden');
+        showToast('Seluruh riwayat data berhasil dibersihkan.', 'success');
+      });
+
+      // Modal Pengaturan Google Apps Script
+      document.getElementById('btn-open-settings').addEventListener('click', () => {
+        webhookUrlInput.value = webhookUrl;
+        settingsModal.classList.remove('hidden');
+      });
+
+      const closeSettingsModal = () => settingsModal.classList.add('hidden');
+      document.getElementById('btn-close-settings').addEventListener('click', closeSettingsModal);
+      document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
+
+      document.getElementById('btn-save-settings').addEventListener('click', () => {
+        webhookUrl = webhookUrlInput.value.trim();
+        localStorage.setItem(WEBHOOK_KEY, webhookUrl);
+        updateWebhookIndicator();
+        closeSettingsModal();
+        showToast(webhookUrl ? 'URL Google Apps Script disimpan.' : 'Integrasi webhook dinonaktifkan.', 'success');
+      });
+
+      document.getElementById('btn-copy-script').addEventListener('click', () => {
+        const code = document.getElementById('apps-script-code').textContent;
+        const temp = document.createElement('textarea');
+        temp.value = code;
+        temp.style.position = 'fixed';
+        temp.style.left = '-9999px';
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast('Kode Google Apps Script berhasil disalin.', 'success');
+      });
+
+      // Inisialisasi Awal saat Halaman Dimuat
+      window.addEventListener('DOMContentLoaded', () => {
+        loadRecordsFromStorage();
+        initOCRWorker();
+        startCamera();
+      });
+    })();
   </script>
 </body>
 </html>
